@@ -55,12 +55,11 @@ let repCodes = {
 };
 const DEFAULT_REP_CODE = "REP1234";
 
-// Urgent Broadcasts per Faculty
-let broadcasts = {
-  "Computing": "Continuous Assessment tests commence next Monday across Twin LT.",
-  "Engineering": "Engineering Workshop orientation scheduled for Friday 10:00 AM.",
-  "General": "Mid-semester verification portal is now active for all faculties."
-};
+// Targeted Broadcasts Store
+let broadcasts = [
+  { id: 1, faculty: "Computing", dept: "Software Engineering", level: "200L", notice: "CSC 201 venue relocated to Twin LT.", time: "Today" },
+  { id: 2, faculty: "Computing", dept: "ALL", level: "ALL", notice: "Continuous Assessment tests commence next Monday across Twin LT.", time: "Today" }
+];
 
 // Timetable Store
 let lectures = [
@@ -69,8 +68,6 @@ let lectures = [
   { id: 3, faculty: "Computing", dept: "Software Engineering", level: "200L", day: "Tue", startTime: "08:00", endTime: "10:00", course: "MTH 201", venue: "Hall C" },
   { id: 4, faculty: "Engineering", dept: "Electrical Engineering", level: "300L", day: "Mon", startTime: "08:00", endTime: "11:00", course: "EEE 301", venue: "Eng Hall 1" }
 ];
-
-let reportedIssues = [];
 
 function getLevelsForDept(deptName) {
   let max = 400;
@@ -93,6 +90,7 @@ app.get('/admin', (req, res) => {
 
   const facultyOptions = Object.keys(faculties).map(f => `<option value="${f}">${f}</option>`).join('');
 
+  // Lecture Rows
   const lectureRows = lectures.map(l => `
     <tr style="border-bottom: 1px solid #eee;">
       <td style="padding: 8px 4px;"><b>${l.dept}</b><br><small style="color:#0052cc;">${l.level} | ${l.day}</small></td>
@@ -102,6 +100,19 @@ app.get('/admin', (req, res) => {
           <input type="hidden" name="id" value="${l.id}">
           <input type="password" name="repCode" placeholder="Code" style="width:65px; padding:4px; font-size:11px; margin-bottom:4px;" required><br>
           <button type="submit" style="background:#dc3545; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Delete</button>
+        </form>
+      </td>
+    </tr>
+  `).join('');
+
+  // Active Bulletins Rows
+  const bulletinRows = broadcasts.map(b => `
+    <tr style="border-bottom: 1px solid #eee;">
+      <td style="padding: 8px 4px;"><b>${b.dept}</b> (${b.level})<br><small style="color:#555;">${b.notice}</small></td>
+      <td style="padding: 8px 4px; text-align:right;">
+        <form method="POST" action="/admin/broadcast/delete" style="margin:0; display:inline;">
+          <input type="hidden" name="id" value="${b.id}">
+          <button type="submit" style="background:#dc3545; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Del</button>
         </form>
       </td>
     </tr>
@@ -133,19 +144,57 @@ app.get('/admin', (req, res) => {
       ${alertMsg}
       ${errorMsg}
 
-      <!-- Broadcast Notice -->
+      <!-- Targeted Broadcast Notice -->
       <div class="card">
-        <h2>Faculty Broadcast Bulletin</h2>
+        <h2>Publish Targeted Bulletin</h2>
         <form method="POST" action="/admin/broadcast">
           <label>Target Faculty:</label>
-          <select name="faculty">${facultyOptions}</select>
+          <select id="bulletinFacultySelect" name="faculty" onchange="updateBulletinDeptsAndLevels()">
+            ${facultyOptions}
+          </select>
+
+          <div class="row">
+            <div>
+              <label>Target Department:</label>
+              <select id="bulletinDeptSelect" name="dept">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+            <div>
+              <label>Target Level:</label>
+              <select id="bulletinLevelSelect" name="level">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+          </div>
+
           <label>Urgent Notice:</label>
-          <textarea name="notice" rows="2" placeholder="Venue shift, test date..." required></textarea>
-          <button type="submit" class="btn-primary">Push Broadcast</button>
+          <textarea name="notice" rows="2" placeholder="e.g. Venue shift to Twin LT, CA date..." required></textarea>
+
+          <label>Class Rep Secret Code:</label>
+          <input type="password" name="repCode" placeholder="Enter department PIN (Default: REP1234)" required />
+
+          <button type="submit" class="btn-primary">Post Bulletin</button>
         </form>
       </div>
 
-      <!-- Add Lecture Form with Cascading Dropdowns -->
+      <!-- Active Bulletins -->
+      <div class="card">
+        <h2>Active Campus Bulletins</h2>
+        <table>
+          <thead>
+            <tr style="text-align:left; color:#666; font-size:11px; border-bottom:2px solid #ddd;">
+              <th>Target & Message</th>
+              <th style="text-align:right;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${bulletinRows.length ? bulletinRows : '<tr><td colspan="2" style="color:#777; padding:8px 0;">No active bulletins.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Add Lecture Form -->
       <div class="card">
         <h2>Add Course Schedule</h2>
         <form method="POST" action="/admin/lectures/add">
@@ -224,7 +273,7 @@ app.get('/admin', (req, res) => {
         </table>
       </div>
 
-      <!-- Rep Codes Directory Management with Filtered Depts -->
+      <!-- Rep Codes Directory Management -->
       <div class="card">
         <h2>Department Rep Code Settings</h2>
         <form method="POST" action="/admin/set-code">
@@ -245,13 +294,13 @@ app.get('/admin', (req, res) => {
       <script>
         const facultiesData = ${JSON.stringify(faculties)};
 
+        // Update Lecture Dropdowns
         function updateDepartmentsAndLevels() {
           const facultyKey = document.getElementById('facultySelect').value;
           const deptSelect = document.getElementById('deptSelect');
           const levelSelect = document.getElementById('levelSelect');
           const facultyObj = facultiesData[facultyKey];
 
-          // Populate Departments
           deptSelect.innerHTML = '';
           facultyObj.depts.forEach(d => {
             const opt = document.createElement('option');
@@ -260,7 +309,6 @@ app.get('/admin', (req, res) => {
             deptSelect.appendChild(opt);
           });
 
-          // Populate Levels based on maxLevel
           levelSelect.innerHTML = '';
           const levels = ["100L", "200L", "300L", "400L"];
           if (facultyObj.maxLevel >= 500) levels.push("500L");
@@ -275,6 +323,35 @@ app.get('/admin', (req, res) => {
           });
         }
 
+        // Update Bulletin Dropdowns (includes "ALL" option)
+        function updateBulletinDeptsAndLevels() {
+          const facultyKey = document.getElementById('bulletinFacultySelect').value;
+          const deptSelect = document.getElementById('bulletinDeptSelect');
+          const levelSelect = document.getElementById('bulletinLevelSelect');
+          const facultyObj = facultiesData[facultyKey];
+
+          deptSelect.innerHTML = '<option value="ALL">Entire Faculty (All Depts)</option>';
+          facultyObj.depts.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d;
+            opt.textContent = d;
+            deptSelect.appendChild(opt);
+          });
+
+          levelSelect.innerHTML = '<option value="ALL">All Levels</option>';
+          const levels = ["100L", "200L", "300L", "400L"];
+          if (facultyObj.maxLevel >= 500) levels.push("500L");
+          if (facultyObj.maxLevel >= 600) levels.push("600L");
+
+          levels.forEach(lvl => {
+            const opt = document.createElement('option');
+            opt.value = lvl;
+            opt.textContent = lvl;
+            levelSelect.appendChild(opt);
+          });
+        }
+
+        // Update Rep Directory Dropdowns
         function updateRepDepts() {
           const facultyKey = document.getElementById('repFacultySelect').value;
           const repDeptSelect = document.getElementById('repDeptSelect');
@@ -291,6 +368,7 @@ app.get('/admin', (req, res) => {
 
         // Initialize on page load
         updateDepartmentsAndLevels();
+        updateBulletinDeptsAndLevels();
         updateRepDepts();
       </script>
     </body>
@@ -300,9 +378,31 @@ app.get('/admin', (req, res) => {
 
 // --- Admin POST Actions ---
 app.post('/admin/broadcast', (req, res) => {
-  const { faculty, notice } = req.body;
-  broadcasts[faculty] = notice;
-  res.redirect('/admin?msg=Broadcast+published+successfully');
+  const { faculty, dept, level, notice, repCode } = req.body;
+  
+  if (dept !== "ALL") {
+    const authorizedCode = repCodes[dept] || DEFAULT_REP_CODE;
+    if (repCode !== authorizedCode) {
+      return res.redirect('/admin?err=Unauthorized:+Invalid+Rep+Code+for+' + encodeURIComponent(dept));
+    }
+  }
+
+  broadcasts.unshift({
+    id: Date.now(),
+    faculty,
+    dept,
+    level,
+    notice,
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  });
+
+  res.redirect('/admin?msg=Bulletin+posted+successfully');
+});
+
+app.post('/admin/broadcast/delete', (req, res) => {
+  const idToDelete = parseInt(req.body.id);
+  broadcasts = broadcasts.filter(b => b.id !== idToDelete);
+  res.redirect('/admin?msg=Bulletin+removed');
 });
 
 app.post('/admin/lectures/add', (req, res) => {
@@ -362,21 +462,18 @@ app.post('/ussd', (req, res) => {
   if (!text || text === '') {
     response = `CON Welcome to LS Dial
 1. Select Faculty Timetable
-2. Urgent Faculty Notices
+2. Urgent Notices & Bulletins
 3. Report Venue/Facility Fault`;
   }
 
-  // LEVEL 1: Select Faculty
+  // --- OPTION 1: TIMETABLES ---
   else if (text === '1') {
     let facultyList = facultyNames.map((f, i) => `${i + 1}. ${f}`).join('\n');
     response = `CON Select Faculty:\n${facultyList}`;
   }
-
-  // LEVEL 2: Select Department under Chosen Faculty
   else if (textArray[0] === '1' && textArray.length === 2) {
     const facultyIndex = parseInt(textArray[1]) - 1;
     const selectedFaculty = facultyNames[facultyIndex];
-
     if (!selectedFaculty) {
       response = `END Invalid Faculty selection.`;
     } else {
@@ -385,8 +482,6 @@ app.post('/ussd', (req, res) => {
       response = `CON ${selectedFaculty} Depts:\n${deptList}`;
     }
   }
-
-  // LEVEL 3: Select Level
   else if (textArray[0] === '1' && textArray.length === 3) {
     const facultyIndex = parseInt(textArray[1]) - 1;
     const selectedFaculty = facultyNames[facultyIndex];
@@ -401,8 +496,6 @@ app.post('/ussd', (req, res) => {
       response = `CON ${selectedDept}\nSelect Level:\n${levelMenu}`;
     }
   }
-
-  // LEVEL 4: Timetable Output
   else if (textArray[0] === '1' && textArray.length === 4) {
     const facultyIndex = parseInt(textArray[1]) - 1;
     const selectedFaculty = facultyNames[facultyIndex];
@@ -433,29 +526,71 @@ app.post('/ussd', (req, res) => {
     }
   }
 
-  // LEVEL 1: Urgent Faculty Notices
+  // --- OPTION 2: TARGETED NOTICES & BULLETINS ---
   else if (text === '2') {
     let facultyList = facultyNames.map((f, i) => `${i + 1}. ${f}`).join('\n');
-    response = `CON View Notice For:\n${facultyList}`;
+    response = `CON View Notice For Faculty:\n${facultyList}`;
   }
-
-  // LEVEL 2: Display Notice for Chosen Faculty
   else if (textArray[0] === '2' && textArray.length === 2) {
     const facultyIndex = parseInt(textArray[1]) - 1;
     const selectedFaculty = facultyNames[facultyIndex];
-    const notice = broadcasts[selectedFaculty] || "No urgent broadcast currently posted for this faculty.";
-    response = `END [${selectedFaculty} Notice]\n${notice}`;
+    if (!selectedFaculty) {
+      response = `END Invalid Faculty selection.`;
+    } else {
+      const depts = faculties[selectedFaculty].depts;
+      const deptList = depts.map((d, i) => `${i + 1}. ${d}`).join('\n');
+      response = `CON ${selectedFaculty}\nSelect Dept:\n${deptList}`;
+    }
+  }
+  else if (textArray[0] === '2' && textArray.length === 3) {
+    const facultyIndex = parseInt(textArray[1]) - 1;
+    const selectedFaculty = facultyNames[facultyIndex];
+    const deptIndex = parseInt(textArray[2]) - 1;
+    const selectedDept = faculties[selectedFaculty]?.depts[deptIndex];
+
+    if (!selectedDept) {
+      response = `END Invalid Department selected.`;
+    } else {
+      const validLevels = getLevelsForDept(selectedDept);
+      const levelMenu = validLevels.map((lvl, i) => `${i + 1}. ${lvl}`).join('\n');
+      response = `CON ${selectedDept}\nSelect Level:\n${levelMenu}`;
+    }
+  }
+  else if (textArray[0] === '2' && textArray.length === 4) {
+    const facultyIndex = parseInt(textArray[1]) - 1;
+    const selectedFaculty = facultyNames[facultyIndex];
+    const deptIndex = parseInt(textArray[2]) - 1;
+    const selectedDept = faculties[selectedFaculty]?.depts[deptIndex];
+    const validLevels = getLevelsForDept(selectedDept);
+    const levelIndex = parseInt(textArray[3]) - 1;
+    const selectedLevel = validLevels[levelIndex];
+
+    if (!selectedLevel) {
+      response = `END Invalid Level choice.`;
+    } else {
+      // Find matching notices (Specific -> Dept-wide -> Faculty-wide)
+      const matchingBulletins = broadcasts.filter(b => 
+        b.faculty === selectedFaculty &&
+        (b.dept === selectedDept || b.dept === "ALL") &&
+        (b.level === selectedLevel || b.level === "ALL")
+      );
+
+      if (matchingBulletins.length === 0) {
+        response = `END [${selectedDept} ${selectedLevel}]\nNo active urgent notices.`;
+      } else {
+        const bulletinText = matchingBulletins.map(b => `• ${b.notice}`).join('\n');
+        response = `END [${selectedLevel} Notices]\n${bulletinText}`;
+      }
+    }
   }
 
-  // LEVEL 1: Report Facility Fault
+  // --- OPTION 3: FACILITY FAULT ---
   else if (text === '3') {
     response = `CON Report Facility Issue:
 1. Broken Sockets/Fans
 2. Hall Locked / No Key
 3. Projector Fault`;
   }
-
-  // LEVEL 2: Log Fault
   else if (textArray[0] === '3' && textArray.length === 2) {
     response = `END Complaint recorded. Works committee alerted.`;
   }
