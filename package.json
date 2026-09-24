@@ -1,0 +1,12 @@
+{
+  "name": "ls-dial",
+  "version": "1.0.0",
+  "description": "Lecture Schedule Dial USSD service for Africa's Talking",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
