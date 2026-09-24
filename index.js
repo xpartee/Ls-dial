@@ -48,7 +48,7 @@ const faculties = {
   }
 };
 
-// Department Rep PIN Codes (Default: REP1234 for quick testing)
+// Department Rep PIN Codes (Default: REP1234)
 let repCodes = {
   "Software Engineering": "SEN2026",
   "Computer Science": "CSC2026"
@@ -62,7 +62,7 @@ let broadcasts = {
   "General": "Mid-semester verification portal is now active for all faculties."
 };
 
-// Structured Timetable Store with From-To Time Range
+// Timetable Store
 let lectures = [
   { id: 1, faculty: "Computing", dept: "Software Engineering", level: "200L", day: "Mon", startTime: "08:00", endTime: "10:00", course: "SEN 201", venue: "Lab 3" },
   { id: 2, faculty: "Computing", dept: "Software Engineering", level: "200L", day: "Mon", startTime: "10:00", endTime: "12:00", course: "CSC 201", venue: "SLT" },
@@ -72,7 +72,6 @@ let lectures = [
 
 let reportedIssues = [];
 
-// Helper: Get levels array for a department
 function getLevelsForDept(deptName) {
   let max = 400;
   for (const f in faculties) {
@@ -92,14 +91,7 @@ app.get('/admin', (req, res) => {
   const alertMsg = req.query.msg ? `<div style="padding:10px; background:#d4edda; color:#155724; border-radius:6px; margin-bottom:12px;">${req.query.msg}</div>` : '';
   const errorMsg = req.query.err ? `<div style="padding:10px; background:#f8d7da; color:#721c24; border-radius:6px; margin-bottom:12px;">${req.query.err}</div>` : '';
 
-  // Generate Faculty & Dept options for the select tags
-  let facultyOptions = Object.keys(faculties).map(f => `<option value="${f}">${f}</option>`).join('');
-  let deptOptions = [];
-  for (const f in faculties) {
-    faculties[f].depts.forEach(d => {
-      deptOptions.push(`<option value="${d}">${d} (${f})</option>`);
-    });
-  }
+  const facultyOptions = Object.keys(faculties).map(f => `<option value="${f}">${f}</option>`).join('');
 
   const lectureRows = lectures.map(l => `
     <tr style="border-bottom: 1px solid #eee;">
@@ -137,7 +129,7 @@ app.get('/admin', (req, res) => {
       </style>
     </head>
     <body>
-      <h1>LS Dial Central <span class="badge">10 Faculties</span></h1>
+      <h1>LS Dial Central <span class="badge">Live</span></h1>
       ${alertMsg}
       ${errorMsg}
 
@@ -153,23 +145,25 @@ app.get('/admin', (req, res) => {
         </form>
       </div>
 
-      <!-- Add Lecture Form -->
+      <!-- Add Lecture Form with Cascading Dropdowns -->
       <div class="card">
         <h2>Add Course Schedule</h2>
         <form method="POST" action="/admin/lectures/add">
+          <label>Faculty:</label>
+          <select id="facultySelect" name="faculty" onchange="updateDepartmentsAndLevels()">
+            ${facultyOptions}
+          </select>
+
           <label>Department:</label>
-          <select name="dept">${deptOptions.join('')}</select>
+          <select id="deptSelect" name="dept">
+            <!-- Dynamically populated -->
+          </select>
           
           <div class="row">
             <div>
               <label>Level:</label>
-              <select name="level">
-                <option value="100L">100L</option>
-                <option value="200L" selected>200L</option>
-                <option value="300L">300L</option>
-                <option value="400L">400L</option>
-                <option value="500L">500L</option>
-                <option value="600L">600L</option>
+              <select id="levelSelect" name="level">
+                <!-- Dynamically populated -->
               </select>
             </div>
             <div>
@@ -230,17 +224,75 @@ app.get('/admin', (req, res) => {
         </table>
       </div>
 
-      <!-- Rep Codes Directory Management -->
+      <!-- Rep Codes Directory Management with Filtered Depts -->
       <div class="card">
         <h2>Department Rep Code Settings</h2>
         <form method="POST" action="/admin/set-code">
-          <label>Select Department:</label>
-          <select name="dept">${deptOptions.join('')}</select>
+          <label>Faculty:</label>
+          <select id="repFacultySelect" onchange="updateRepDepts()">
+            ${facultyOptions}
+          </select>
+          <label>Department:</label>
+          <select id="repDeptSelect" name="dept">
+            <!-- Dynamically populated -->
+          </select>
           <label>New Secret Access Code:</label>
           <input type="text" name="newCode" placeholder="e.g. SEN7742" required />
           <button type="submit" class="btn-primary">Update Dept Code</button>
         </form>
       </div>
+
+      <script>
+        const facultiesData = ${JSON.stringify(faculties)};
+
+        function updateDepartmentsAndLevels() {
+          const facultyKey = document.getElementById('facultySelect').value;
+          const deptSelect = document.getElementById('deptSelect');
+          const levelSelect = document.getElementById('levelSelect');
+          const facultyObj = facultiesData[facultyKey];
+
+          // Populate Departments
+          deptSelect.innerHTML = '';
+          facultyObj.depts.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d;
+            opt.textContent = d;
+            deptSelect.appendChild(opt);
+          });
+
+          // Populate Levels based on maxLevel
+          levelSelect.innerHTML = '';
+          const levels = ["100L", "200L", "300L", "400L"];
+          if (facultyObj.maxLevel >= 500) levels.push("500L");
+          if (facultyObj.maxLevel >= 600) levels.push("600L");
+
+          levels.forEach(lvl => {
+            const opt = document.createElement('option');
+            opt.value = lvl;
+            opt.textContent = lvl;
+            if (lvl === "200L") opt.selected = true;
+            levelSelect.appendChild(opt);
+          });
+        }
+
+        function updateRepDepts() {
+          const facultyKey = document.getElementById('repFacultySelect').value;
+          const repDeptSelect = document.getElementById('repDeptSelect');
+          const depts = facultiesData[facultyKey].depts;
+
+          repDeptSelect.innerHTML = '';
+          depts.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d;
+            opt.textContent = d;
+            repDeptSelect.appendChild(opt);
+          });
+        }
+
+        // Initialize on page load
+        updateDepartmentsAndLevels();
+        updateRepDepts();
+      </script>
     </body>
     </html>
   `);
@@ -254,25 +306,16 @@ app.post('/admin/broadcast', (req, res) => {
 });
 
 app.post('/admin/lectures/add', (req, res) => {
-  const { dept, level, day, startTime, endTime, course, venue, repCode } = req.body;
+  const { faculty, dept, level, day, startTime, endTime, course, venue, repCode } = req.body;
   const authorizedCode = repCodes[dept] || DEFAULT_REP_CODE;
 
   if (repCode !== authorizedCode) {
     return res.redirect('/admin?err=Unauthorized:+Invalid+Rep+Code+for+' + encodeURIComponent(dept));
   }
 
-  // Find corresponding faculty
-  let matchedFaculty = "General";
-  for (const f in faculties) {
-    if (faculties[f].depts.includes(dept)) {
-      matchedFaculty = f;
-      break;
-    }
-  }
-
   lectures.push({
     id: Date.now(),
-    faculty: matchedFaculty,
+    faculty,
     dept,
     level,
     day,
@@ -323,7 +366,7 @@ app.post('/ussd', (req, res) => {
 3. Report Venue/Facility Fault`;
   }
 
-  // LEVEL 1: Select Faculty List (1 to 10)
+  // LEVEL 1: Select Faculty
   else if (text === '1') {
     let facultyList = facultyNames.map((f, i) => `${i + 1}. ${f}`).join('\n');
     response = `CON Select Faculty:\n${facultyList}`;
@@ -343,7 +386,7 @@ app.post('/ussd', (req, res) => {
     }
   }
 
-  // LEVEL 3: Select Level (100L up to 600L dynamically)
+  // LEVEL 3: Select Level
   else if (textArray[0] === '1' && textArray.length === 3) {
     const facultyIndex = parseInt(textArray[1]) - 1;
     const selectedFaculty = facultyNames[facultyIndex];
@@ -359,7 +402,7 @@ app.post('/ussd', (req, res) => {
     }
   }
 
-  // LEVEL 4: Timetable Output (Today's Classes)
+  // LEVEL 4: Timetable Output
   else if (textArray[0] === '1' && textArray.length === 4) {
     const facultyIndex = parseInt(textArray[1]) - 1;
     const selectedFaculty = facultyNames[facultyIndex];
@@ -404,7 +447,7 @@ app.post('/ussd', (req, res) => {
     response = `END [${selectedFaculty} Notice]\n${notice}`;
   }
 
-  // LEVEL 1: Report Venue / Facility Fault
+  // LEVEL 1: Report Facility Fault
   else if (text === '3') {
     response = `CON Report Facility Issue:
 1. Broken Sockets/Fans
